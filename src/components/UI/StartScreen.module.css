@@ -1,0 +1,86 @@
+.landingOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 1000;
+  background: radial-gradient(
+    circle at center,
+    transparent,
+    rgba(0, 0, 0, 0.85)
+  );
+}
+
+.splashBackground {
+  position: fixed;
+  inset: 0;
+  background-image: url("/images/splash_screen.png");
+  background-size: cover;
+  background-position: center;
+  z-index: -1;
+  filter: brightness(0.9);
+}
+
+.landingTitle {
+  font-size: 4rem;
+  font-weight: 900;
+  letter-spacing: 0.2rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(to bottom, #fff, var(--text-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.btnRitual {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 18px 48px;
+  border-radius: var(--button-radius);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.1rem;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.btnRitual:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 40px var(--accent-glow);
+  filter: brightness(1.1);
+}
+
+.btnSecondaryLink {
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1rem;
+  margin-top: 20px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.btnSecondaryLink:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.fadeIn {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

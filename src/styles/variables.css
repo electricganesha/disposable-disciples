@@ -1,0 +1,23 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap");
+
+:root {
+  --glass-bg: hsla(270, 50%, 5%, 0.7);
+  --glass-blur: blur(12px);
+  --glass-border: hsla(270, 50%, 50%, 0.2);
+  --glass-shadow: 0 8px 32px 0 hsla(270, 50%, 0%, 0.8);
+
+  --accent: hsl(270, 95%, 65%);
+  --accent-glow: hsla(270, 95%, 65%, 0.4);
+  --accent-dim: hsla(270, 95%, 65%, 0.1);
+
+  --text-primary: hsl(270, 100%, 95%);
+  --text-secondary: hsla(270, 100%, 95%, 0.6);
+  --text-dim: hsla(270, 100%, 95%, 0.3);
+
+  --danger: hsl(350, 95%, 60%);
+  --success: hsl(150, 95%, 50%);
+
+  --font-main: "Outfit", -apple-system, sans-serif;
+  --panel-radius: 24px;
+  --button-radius: 16px;
+}

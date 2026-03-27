@@ -1,0 +1,63 @@
+.landingOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 1000;
+  background: radial-gradient(
+    circle at center,
+    transparent,
+    rgba(0, 0, 0, 0.85)
+  );
+}
+
+.landingTitle {
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: 0.2rem;
+  margin-bottom: 2rem;
+  background: linear-gradient(to bottom, #fff, var(--text-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.statsSummary {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  margin-bottom: 40px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.statsSummary span {
+  display: block;
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  margin-top: 4px;
+}
+
+.victoryTitle {
+  color: var(--success) !important;
+  text-shadow: 0 0 30px rgba(34, 197, 94, 0.4) !important;
+}
+
+.defeatTitle {
+  color: var(--danger) !important;
+  text-shadow: 0 0 30px rgba(244, 63, 94, 0.4) !important;
+}
+
+.fadeIn {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { Vector3 } from 'three';
 
-export type Job = 'NONE' | 'BLOCKER' | 'BONE_WEAVER';
-export type FloorType = 'STONE' | 'BONE';
+export type Job = 'NONE' | 'BLOCKER' | 'BONE_WEAVER' | 'DIGGER';
+export type FloorType = 'STONE' | 'BONE' | 'SUPPORT';
 
 export interface CultistData {
   id: string;
@@ -30,16 +30,30 @@ interface GameState {
   totalSpawningLimit: number;
   requiredSavedCount: number;
 
+  // Level Management
+  currentLevelIndex: number;
+  gameStarted: boolean;
+  gameWon: boolean;
+  gameLost: boolean;
+
   // World
   grid: Map<string, FloorType>;
   gatePosition: [number, number, number];
   altarPosition: [number, number, number];
+  staircasePositions: [number, number, number][];
+  pillarPositions: [number, number, number][];
+  jobQuotas: { [key: string]: number };
+
+  // Atmosphere (Parameterised)
+  environmentType: 'ELDRITCH' | 'VOID' | 'BONE';
+  backgroundColor: string;
+  ambientColor: string;
+  lightIntensity: number;
 
   // Interaction
   activeJob: Job;
   cultists: CultistData[];
-  gameStarted: boolean;
-  weavingCount: number; // how many bone weavers are actively weaving
+  weavingCount: number;
 
   // Particle FX
   explosions: ExplosionData[];
@@ -47,6 +61,8 @@ interface GameState {
 
   // Actions
   startGame: () => void;
+  loadLevel: (index: number) => void;
+  loadNextLevel: () => void;
   setJob: (job: Job) => void;
   addCultist: () => void;
   updateCultistPosition: (id: string, pos: [number, number, number]) => void;
@@ -55,7 +71,7 @@ interface GameState {
   selectCultist: (id: string) => void;
   removeCultist: (id: string, success?: boolean) => void;
   addFloorCube: (x: number, z: number) => void;
-  getFloorAt: (x: number, z: number) => FloorType | undefined;
+  getFloorAt: (x: number, z: number, targetY?: number) => FloorType | undefined;
   isBlockedAt: (x: number, z: number, excludeId: string) => boolean;
 
   removeExplosion: (id: string) => void;
@@ -63,17 +79,25 @@ interface GameState {
   addExplosion: (position: Vector3) => void;
   addSuccess: (position: Vector3) => void;
   setWeavingCount: (count: number) => void;
+
+  // Editor
+  view: 'GAME' | 'EDITOR';
+  setView: (view: 'GAME' | 'EDITOR') => void;
+  selectedPaletteItem: string;
+  setSelectedPaletteItem: (item: string) => void;
+  updateLevelFromASCII: (ascii: string) => void;
+  placeAt: (x: number, y: number, item: string) => void;
+  removeAt: (x: number, y: number) => void;
+  removeFloorCube: (x: number, y: number) => void;
 }
 
-// Initial stone floor: left platform [-8..-4] and right platform [4..8]
-function buildInitialGrid(): Map<string, FloorType> {
-  const grid = new Map<string, FloorType>();
-  for (let x = -8; x <= -4; x++) grid.set(`${x},0`, 'STONE');
-  for (let x = 4; x <= 8; x++) grid.set(`${x},0`, 'STONE');
-  return grid;
-}
+// ... (existing types)
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+import { RITUAL_LEVELS, parseLayout } from './data/levels';
+
+// ... (existing types)
 
 export const useStore = create<GameState>((set, get) => ({
   savedCount: 0,
@@ -83,18 +107,80 @@ export const useStore = create<GameState>((set, get) => ({
   totalSpawningLimit: 20,
   requiredSavedCount: 15,
 
-  grid: buildInitialGrid(),
+  currentLevelIndex: 0,
+  gameStarted: false,
+  gameWon: false,
+  gameLost: false,
+
+  grid: new Map(),
   gatePosition: [-7, 0.6, 0],
   altarPosition: [7.5, 1.5, 0],
+  staircasePositions: [],
+  pillarPositions: [],
+  jobQuotas: {},
+
+  environmentType: 'ELDRITCH',
+  backgroundColor: '#050208',
+  ambientColor: '#c4b5fd',
+  lightIntensity: 1.2,
 
   activeJob: 'NONE',
   cultists: [],
-  gameStarted: false,
   weavingCount: 0,
   explosions: [],
   successes: [],
 
-  startGame: () => set({ gameStarted: true }),
+  startGame: () => {
+    const params = new URLSearchParams(window.location.search);
+    const levelValue = params.get("level");
+    const startIndex = levelValue ? parseInt(levelValue, 10) : 0;
+    const finalIndex = isNaN(startIndex) ? 0 : startIndex;
+    
+    get().loadLevel(finalIndex);
+    set({ gameStarted: true });
+  },
+
+  loadLevel: (index) => {
+    const level = RITUAL_LEVELS[index];
+    if (!level) return;
+
+    const gridMap = new Map<string, FloorType>();
+    if (level.gridData) {
+      Object.entries(level.gridData).forEach(([key, val]) => {
+        gridMap.set(key, val);
+      });
+    }
+
+    set({
+      currentLevelIndex: index,
+      savedCount: 0,
+      lostCount: 0,
+      totalSpawned: 0,
+      totalSpawningLimit: level.spawnLimit,
+      requiredSavedCount: level.requiredSaved,
+      grid: gridMap,
+      gatePosition: level.gatePosition,
+      altarPosition: level.altarPosition,
+      staircasePositions: level.staircasePositions || [],
+      pillarPositions: level.pillarPositions || [],
+      jobQuotas: level.jobQuotas,
+      environmentType: level.environmentType || 'ELDRITCH',
+      backgroundColor: level.backgroundColor || '#050208',
+      ambientColor: level.ambientColor || '#c4b5fd',
+      lightIntensity: level.lightIntensity ?? 1.2,
+      cultists: [],
+      gameWon: false,
+      gameLost: false,
+    });
+  },
+
+  loadNextLevel: () => {
+    const nextIndex = get().currentLevelIndex + 1;
+    if (nextIndex < RITUAL_LEVELS.length) {
+      get().loadLevel(nextIndex);
+    }
+  },
+
   setJob: (job) => set({ activeJob: job }),
 
   addCultist: () =>
@@ -149,12 +235,24 @@ export const useStore = create<GameState>((set, get) => ({
     })),
 
   removeCultist: (id, success = false) =>
-    set((state) => ({
-      savedCount: success ? state.savedCount + 1 : state.savedCount,
-      lostCount: !success ? state.lostCount + 1 : state.lostCount,
-      lastSavedTime: success ? Date.now() : state.lastSavedTime,
-      cultists: state.cultists.filter((c) => c.id !== id),
-    })),
+    set((state) => {
+      const newSavedCount = success ? state.savedCount + 1 : state.savedCount;
+      const newLostCount = !success ? state.lostCount + 1 : state.lostCount;
+      const newCultists = state.cultists.filter((c) => c.id !== id);
+      
+      const victory = newSavedCount >= state.requiredSavedCount;
+      const allSpawned = state.totalSpawned >= state.totalSpawningLimit;
+      const defeat = allSpawned && newCultists.length === 0 && newSavedCount < state.requiredSavedCount;
+
+      return {
+        savedCount: newSavedCount,
+        lostCount: newLostCount,
+        lastSavedTime: success ? Date.now() : state.lastSavedTime,
+        cultists: newCultists,
+        gameWon: victory,
+        gameLost: defeat,
+      };
+    }),
 
   addFloorCube: (x, z) =>
     set((state) => {
@@ -163,10 +261,30 @@ export const useStore = create<GameState>((set, get) => ({
       return { grid: newGrid };
     }),
 
-  getFloorAt: (x, z) => get().grid.get(`${Math.round(x)},${Math.round(z)}`),
+  getFloorAt: (x, targetY) => {
+    const xRound = Math.round(x);
+    const yVal = targetY !== undefined ? targetY : 0;
+    
+    // Check main grid
+    const inGrid = get().grid.get(`${xRound},${yVal}`);
+    if (inGrid) return inGrid;
 
-  // A cultist is "blocked" if another cultist with job=BLOCKER is
-  // within 1 unit of the given (x,z) position.
+    // Check staircases
+    const onStair = get().staircasePositions.some(
+      (p) => Math.round(p[0]) === xRound && Math.round(p[1]) === yVal
+    );
+    if (onStair) return "STONE";
+
+    // Check altar
+    const altar = get().altarPosition;
+    if (Math.round(altar[0]) === xRound && Math.round(altar[1]) === yVal) {
+      return "STONE";
+    }
+
+    return undefined;
+  },
+
+
   isBlockedAt: (x, z, excludeId) =>
     get().cultists.some(
       (c) =>
@@ -195,4 +313,84 @@ export const useStore = create<GameState>((set, get) => ({
       ],
     })),
   setWeavingCount: (count) => set({ weavingCount: count }),
+
+  // Editor
+  view: 'GAME',
+  setView: (view) => set({ view }),
+  selectedPaletteItem: '#',
+  setSelectedPaletteItem: (selectedPaletteItem) => set({ selectedPaletteItem }),
+  updateLevelFromASCII: (ascii) => {
+    const levelData = parseLayout(ascii);
+    const gridMap = new Map<string, FloorType>();
+    if (levelData.gridData) {
+      Object.entries(levelData.gridData).forEach(([key, val]) => {
+        gridMap.set(key, val);
+      });
+    }
+
+    set({
+      grid: gridMap,
+      gatePosition: levelData.gatePosition as [number, number, number],
+      altarPosition: levelData.altarPosition as [number, number, number],
+      staircasePositions: levelData.staircasePositions || [],
+      pillarPositions: levelData.pillarPositions || [],
+      cultists: [],
+    });
+  },
+  placeAt: (x, y, item) => set((state) => {
+    // This is more complex because we need to update the correct arrays
+    const newGrid = new Map(state.grid);
+    const newStairs = [...state.staircasePositions];
+    const newPillars = [...state.pillarPositions];
+    let newGate = [...state.gatePosition] as [number, number, number];
+    let newAltar = [...state.altarPosition] as [number, number, number];
+
+    // Remove existing at this coord if needed? 
+    // For simplicity, we just add.
+    const xRound = Math.round(x);
+    const yRound = Math.round(y);
+
+    switch(item) {
+      case '#': newGrid.set(`${xRound},${yRound}`, 'STONE'); break;
+      case 'B': newGrid.set(`${xRound},${yRound}`, 'BONE'); break;
+      case 'C': newGrid.set(`${xRound},${yRound}`, 'SUPPORT'); break;
+      case 'S': newStairs.push([xRound, yRound, 0]); break;
+      case '|': newPillars.push([xRound, yRound, 0]); break;
+      case 'G': newGate = [xRound, yRound + 0.1, 0]; break;
+      case 'A': newAltar = [xRound, yRound + 0.1, 0]; break;
+    }
+
+    return {
+      grid: newGrid,
+      staircasePositions: newStairs,
+      pillarPositions: newPillars,
+      gatePosition: newGate,
+      altarPosition: newAltar
+    };
+  }),
+  removeAt: (x, y) => set((state) => {
+    const xRound = Math.round(x);
+    const yRound = Math.round(y);
+    const newGrid = new Map(state.grid);
+    newGrid.delete(`${xRound},${yRound}`);
+
+    // Check if we are removing the gate or altar
+    const isGate = Math.round(state.gatePosition[0]) === xRound && Math.floor(state.gatePosition[1]) === yRound;
+    const isAltar = Math.round(state.altarPosition[0]) === xRound && Math.floor(state.altarPosition[1]) === yRound;
+
+    return {
+      grid: newGrid,
+      staircasePositions: state.staircasePositions.filter(p => Math.round(p[0]) !== xRound || Math.round(p[1]) !== yRound),
+      pillarPositions: state.pillarPositions.filter(p => Math.round(p[0]) !== xRound || Math.round(p[1]) !== yRound),
+      gatePosition: isGate ? [999, 999, 0] : state.gatePosition,
+      altarPosition: isAltar ? [999, 999, 0] : state.altarPosition,
+    };
+  }),
+  removeFloorCube: (x, y) => set((state) => {
+    const xRound = Math.round(x);
+    const yRound = Math.round(y);
+    const newGrid = new Map(state.grid);
+    newGrid.delete(`${xRound},${yRound}`);
+    return { grid: newGrid };
+  }),
 }));

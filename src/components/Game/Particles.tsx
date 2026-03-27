@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useStore, type ExplosionData } from "../store";
+import { useStore, type ExplosionData } from "../../store";
 
 const PARTICLE_COUNT = 32;
 const DURATION = 1200; // ms
@@ -9,18 +9,18 @@ const DURATION = 1200; // ms
 const SingleExplosion = ({ data }: { data: ExplosionData }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const [tempObject] = useState(() => new THREE.Object3D());
-  
+
   // Use state initializer for idempotent random values
-  const [particles] = useState(() => 
+  const [particles] = useState(() =>
     Array.from({ length: PARTICLE_COUNT }, () => ({
       velocity: new THREE.Vector3(
         (Math.random() - 0.5) * 6,
         (Math.random() - 0.2) * 8,
-        (Math.random() - 0.5) * 6
+        (Math.random() - 0.5) * 6,
       ),
       position: new THREE.Vector3(0, 0, 0),
       scale: Math.random() * 0.12 + 0.04,
-    }))
+    })),
   );
 
   useFrame((_state, delta) => {
@@ -36,7 +36,7 @@ const SingleExplosion = ({ data }: { data: ExplosionData }) => {
     particles.forEach((p, i) => {
       p.position.add(p.velocity.clone().multiplyScalar(delta));
       p.velocity.y -= 12 * delta; // Gravity on particles
-      
+
       const s = p.scale * (1.2 - progress);
       tempObject.position.copy(p.position);
       tempObject.scale.setScalar(Math.max(0, s));
@@ -47,14 +47,18 @@ const SingleExplosion = ({ data }: { data: ExplosionData }) => {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, PARTICLE_COUNT]} position={data.position}>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, PARTICLE_COUNT]}
+      position={data.position}
+    >
       <sphereGeometry args={[1, 6, 6]} />
-      <meshStandardMaterial 
-        color="#9333ea" 
-        emissive="#9333ea" 
-        emissiveIntensity={3} 
-        transparent 
-        opacity={0.9} 
+      <meshStandardMaterial
+        color="#9333ea"
+        emissive="#9333ea"
+        emissiveIntensity={3}
+        transparent
+        opacity={0.9}
       />
     </instancedMesh>
   );
@@ -65,18 +69,18 @@ const SuccessBurst = ({ data }: { data: ExplosionData }) => {
   const [tempObject] = useState(() => new THREE.Object3D());
   const COUNT = 24;
   const WIN_DURATION = 2000;
-  
-  const [particles] = useState(() => 
+
+  const [particles] = useState(() =>
     Array.from({ length: COUNT }, () => ({
       velocity: new THREE.Vector3(
         (Math.random() - 0.5) * 2,
         Math.random() * 4 + 2, // Upward movement
-        (Math.random() - 0.5) * 2
+        (Math.random() - 0.5) * 2,
       ),
       position: new THREE.Vector3(0, 0, 0),
       scale: Math.random() * 0.15 + 0.05,
-      rotationSpeed: (Math.random() - 0.5) * 5
-    }))
+      rotationSpeed: (Math.random() - 0.5) * 5,
+    })),
   );
 
   useFrame((_state, delta) => {
@@ -92,7 +96,7 @@ const SuccessBurst = ({ data }: { data: ExplosionData }) => {
     particles.forEach((p, i) => {
       p.position.add(p.velocity.clone().multiplyScalar(delta));
       p.velocity.y += 2 * delta; // Upward acceleration (Soul float)
-      
+
       const s = p.scale * (1.0 - progress);
       tempObject.position.copy(p.position);
       tempObject.scale.setScalar(Math.max(0, s));
@@ -104,14 +108,18 @@ const SuccessBurst = ({ data }: { data: ExplosionData }) => {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, COUNT]} position={data.position}>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, COUNT]}
+      position={data.position}
+    >
       <octahedronGeometry args={[0.5, 0]} />
-      <meshStandardMaterial 
+      <meshStandardMaterial
         color="#22c55e" // Success Green
-        emissive="#22c55e" 
-        emissiveIntensity={4} 
-        transparent 
-        opacity={0.8} 
+        emissive="#22c55e"
+        emissiveIntensity={4}
+        transparent
+        opacity={0.8}
       />
     </instancedMesh>
   );

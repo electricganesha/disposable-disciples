@@ -2,10 +2,11 @@ import { useRef, useEffect, memo, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useBox } from "@react-three/cannon";
-import { useStore, type Job } from "../store";
+import { useStore, type Job } from "../../store";
 
 const SPEED = 1.8;
 const WEAVE_TIME = 1.4; // seconds to build one floor tile
+const DIG_TIME = 0.8; // seconds to dig through one floor tile
 const FALL_THRESHOLD = -4;
 
 // ── Procedural cultist character mesh ────────────────────────────────────────
@@ -14,18 +15,22 @@ const CultistMesh = ({
   job,
   selected,
   isWeaving,
+  isDigging,
   walkPhase,
   scale,
   texture,
   hueShift,
+  hovered,
 }: {
   job: Job;
   selected: boolean;
   isWeaving: boolean;
+  isDigging: boolean;
   walkPhase: number; // 0..2π, drives sway
   scale: [number, number, number];
   texture?: THREE.Texture;
   hueShift: number;
+  hovered: boolean;
 }) => {
   const bodyColor =
     job === "BLOCKER"
@@ -38,27 +43,31 @@ const CultistMesh = ({
       ? "#ff3333"
       : job === "BONE_WEAVER"
         ? "#c084fc"
-        : "#22c55e";
+        : "#c5af22ff";
   const emissiveI = job === "BONE_WEAVER" ? 0.5 : 0;
   const opacity = job === "BLOCKER" ? 0.95 : 1.0;
   const isBlocker = job === "BLOCKER";
   const isWeaver = job === "BONE_WEAVER";
+  const isDigger = job === "DIGGER";
 
   const finalBodyColor = useMemo(() => {
-    const c = new THREE.Color(bodyColor);
+    // Diggers look more "sooty" (darker/greyer)
+    const baseColor = isDigger ? "#2f4f4f" : bodyColor;
+    const c = new THREE.Color(baseColor);
     return c.offsetHSL(hueShift, 0, 0);
-  }, [bodyColor, hueShift]);
+  }, [bodyColor, hueShift, isDigger]);
 
   const sway = Math.sin(walkPhase) * 0.14;
+  const s = hovered ? 1.08 : 1.0;
 
   return (
-    <group scale={scale}>
-      {/* Selection glow */}
-      {selected && (
+    <group scale={[scale[0] * s, scale[1] * s, scale[2] * s]}>
+      {/* Selection/Hover glow */}
+      {(selected || hovered) && (
         <pointLight
           position={[0, 0.8, 0]}
-          intensity={2}
-          color="#e9d5ff"
+          intensity={selected ? 2 : 1.5}
+          color={selected ? "#e9d5ff" : eyeColor}
           distance={2.5}
         />
       )}
@@ -73,8 +82,8 @@ const CultistMesh = ({
         <meshStandardMaterial
           map={texture}
           color={finalBodyColor}
-          emissive={finalBodyColor}
-          emissiveIntensity={emissiveI * 0.4}
+          emissive={hovered ? eyeColor : finalBodyColor}
+          emissiveIntensity={hovered ? 0.8 : emissiveI * 0.4}
           roughness={0.9}
           transparent={isBlocker}
           opacity={opacity}
@@ -91,8 +100,8 @@ const CultistMesh = ({
         <meshStandardMaterial
           map={texture}
           color={finalBodyColor}
-          emissive={finalBodyColor}
-          emissiveIntensity={emissiveI * 0.4}
+          emissive={hovered ? eyeColor : finalBodyColor}
+          emissiveIntensity={hovered ? 0.8 : emissiveI * 0.4}
           roughness={0.9}
           transparent={isBlocker}
           opacity={opacity}
@@ -115,8 +124,8 @@ const CultistMesh = ({
         <meshStandardMaterial
           map={texture}
           color={finalBodyColor}
-          emissive={finalBodyColor}
-          emissiveIntensity={emissiveI * 0.4}
+          emissive={hovered ? eyeColor : finalBodyColor}
+          emissiveIntensity={hovered ? 0.8 : emissiveI * 0.4}
           roughness={0.9}
           transparent={isBlocker}
           opacity={opacity}
@@ -175,12 +184,20 @@ const CultistMesh = ({
       </group>
 
       {/* Weaving particle ring */}
-      {isWeaving && <WeavingRing />}
+      {isWeaving && <JobEffectRing color="#c084fc" emissive="#9333ea" />}
+      {/* Digging particle ring */}
+      {isDigging && <JobEffectRing color="#ef4444" emissive="#b91c1c" />}
     </group>
   );
 };
 
-const WeavingRing = () => {
+const JobEffectRing = ({
+  color,
+  emissive,
+}: {
+  color: string;
+  emissive: string;
+}) => {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame(() => {
     if (ref.current) ref.current.rotation.y += 0.06;
@@ -189,8 +206,8 @@ const WeavingRing = () => {
     <mesh ref={ref} position={[0, 0.3, 0]}>
       <torusGeometry args={[0.3, 0.025, 8, 24]} />
       <meshStandardMaterial
-        color="#c084fc"
-        emissive="#9333ea"
+        color={color}
+        emissive={emissive}
         emissiveIntensity={4}
       />
     </mesh>
@@ -218,6 +235,14 @@ const Cultist = memo(
     speedMultiplier: number;
     hueShift: number;
   }) => {
+    interface PhysicsUserData {
+      isCultist?: boolean;
+      id?: string;
+      isFloor?: boolean;
+      x?: number;
+      y?: number;
+    }
+
     const groupRef = useRef<THREE.Group>(null!);
     const posRef = useRef<[number, number, number]>(initialPos);
     const velRef = useRef<[number, number, number]>([0, 0, 0]);
@@ -229,6 +254,10 @@ const Cultist = memo(
     const removedRef = useRef(false);
     const [walkPhase, setWalkPhase] = useState(0);
     const [isWeaving, setIsWeaving] = useState(false);
+    const [isDigging, setIsDigging] = useState(false);
+    const [hovered, setHovered] = useState(false);
+    const digProgress = useRef(0);
+    const lastFloorRef = useRef<{ x: number; y: number } | null>(null);
 
     // Sync direction from store on mount and whenever job changes
     useEffect(() => {
@@ -250,11 +279,15 @@ const Cultist = memo(
       collisionFilterMask: 1 | 2,
       userData: { id, isCultist: true },
       onCollide: (e) => {
+        // Detect floor tiles
+        const other = e.body?.userData as PhysicsUserData;
+        if (other?.isFloor) {
+          lastFloorRef.current = { x: other.x!, y: other.y! };
+        }
+
         // Don't flip direction if this cultist is actively weaving
         if (weavingRef.current) return;
-        const other = e.body?.userData as
-          | { isCultist?: boolean; id?: string }
-          | undefined;
+
         if (other?.isCultist && other.id !== id) {
           const now = Date.now();
           if (now - lastFlipTime.current > 500) {
@@ -308,7 +341,8 @@ const Cultist = memo(
       // ── Altar goal detection ────────────────────────────────────────────────
       const [ax, ay, az] = store.altarPosition;
       const xzDist = Math.sqrt((px - ax) ** 2 + (pz - az) ** 2);
-      if (xzDist < 1.3 && py > ay - 0.5) {
+      // Physcially touching center: reduce distance from 1.3 to 0.4
+      if (xzDist < 0.4 && py > ay - 0.5 && py < ay + 2) {
         removedRef.current = true;
         store.addSuccess(new THREE.Vector3(px, py, pz));
         store.removeCultist(id, true);
@@ -387,6 +421,52 @@ const Cultist = memo(
             s.setWeavingCount(Math.max(0, s.weavingCount - 1));
           }
         }
+      } else if (job === "DIGGER") {
+        // If we have a latched floor column, stay in it
+        const targetX = lastFloorRef.current
+          ? lastFloorRef.current.x
+          : Math.round(px);
+        const targetY = lastFloorRef.current
+          ? lastFloorRef.current.y
+          : Math.floor(py);
+
+        const floorBelow = store.getFloorAt(targetX, pz, targetY);
+        if (floorBelow) {
+          api.velocity.set(0, vy, 0);
+          if (!isDigging) {
+            setIsDigging(true);
+          }
+          digProgress.current += delta;
+          if (digProgress.current >= DIG_TIME) {
+            digProgress.current = 0;
+            store.removeFloorCube(targetX, targetY);
+            // DO NOT clear lastFloorRef here, keep latched to column
+          }
+        } else {
+          // If we were digging but now the floor is gone, stay still while falling
+          const isFalling = Math.abs(vy) > 0.1;
+          if (isFalling || isDigging) {
+            api.velocity.set(0, vy, 0);
+          } else {
+            // Not digging and not falling (grounded but no target block below)
+            // Walk until we collide with a new block
+            const aheadX = px + dir * 0.6;
+            const blocked = store.isBlockedAt(aheadX, pz, id);
+            targetVx = blocked ? 0 : dir * speed;
+            api.velocity.set(targetVx, vy, 0);
+          }
+
+          if (isDigging && !isFalling) {
+            setIsDigging(false);
+            // Optionally, count active diggers for audio/effects
+            // const s = useStore.getState();
+            // s.setDiggingCount(Math.max(0, s.diggingCount - 1));
+          }
+        }
+      } else {
+        // Reset digging/weaving if job changed
+        if (isDigging) setIsDigging(false);
+        if (isWeaving) setIsWeaving(false);
       }
 
       // ── Step-up assist ───────────────────────────────────────────────────────
@@ -396,12 +476,12 @@ const Cultist = memo(
         const vx = velRef.current[0];
         const wantsToMove = Math.abs(targetVx) > 0.5;
         const isGrounded = Math.abs(vy) < 1.5; // don't hop mid-air
-        const isStuck = wantsToMove && isGrounded && Math.abs(vx) < 0.6;
+        const isStuck = wantsToMove && isGrounded && Math.abs(vx) < 0.8;
         const floorAhead = store.getFloorAt(px + dir * 0.7, pz);
         const now = Date.now();
         if (isStuck && floorAhead && now - lastStepTime.current > 400) {
           lastStepTime.current = now;
-          api.velocity.set(targetVx, 5, 0); // short upward pop
+          api.velocity.set(targetVx, 6, 0); // slightly stronger upward pop
         }
       }
 
@@ -421,15 +501,29 @@ const Cultist = memo(
     });
 
     return (
-      <group ref={groupRef}>
+      <group
+        ref={groupRef}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          setHovered(true);
+          (e.nativeEvent.target as HTMLElement).style.cursor = "pointer";
+        }}
+        onPointerOut={(e) => {
+          e.stopPropagation();
+          setHovered(false);
+          (e.nativeEvent.target as HTMLElement).style.cursor = "";
+        }}
+      >
         <CultistMesh
           job={job}
           selected={selected}
           isWeaving={isWeaving}
+          isDigging={isDigging}
           walkPhase={walkPhase}
           scale={scale}
           texture={texture}
           hueShift={hueShift}
+          hovered={hovered}
         />
       </group>
     );
@@ -468,9 +562,7 @@ export const CultistManager = () => {
           onClick={(e) => {
             e.stopPropagation();
             const state = useStore.getState();
-            if (state.activeJob !== "NONE") {
-              state.updateCultistJob(c.id, state.activeJob);
-            }
+            state.updateCultistJob(c.id, state.activeJob);
             state.selectCultist(c.id);
           }}
         >
