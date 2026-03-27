@@ -52,6 +52,7 @@ interface RitualistButtonProps {
 }
 
 export const RitualistButton: FC<RitualistButtonProps> = ({
+  job,
   active,
   label,
   icon,
@@ -60,6 +61,7 @@ export const RitualistButton: FC<RitualistButtonProps> = ({
   <button
     className={`${styles.jobBtn} ${active ? styles.active : ""}`}
     onClick={onClick}
+    data-job={job}
   >
     <span
       className={`${styles.statLabel}`}

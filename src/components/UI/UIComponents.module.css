@@ -87,7 +87,6 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 0 12px var(--accent-glow));
 }
 
 .jobBtn:hover .jobIcon {

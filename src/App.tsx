@@ -10,6 +10,7 @@ import { useStore } from "./store";
 import "./styles/variables.css";
 import "./styles/global.css";
 import "./styles/animations.css";
+import "./App.css";
 
 import { StartScreen } from "./components/UI/StartScreen";
 import { GameOverOverlay } from "./components/UI/GameOverOverlay";
