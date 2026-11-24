@@ -1,0 +1,99 @@
+.loadingOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 2000;
+  background: #050208;
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.glassPanel {
+  padding: 48px;
+  max-width: 500px;
+  width: 90%;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.summoningCircle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px dashed var(--accent);
+  position: relative;
+  animation: spin 12s linear infinite;
+  margin-bottom: 24px;
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.runeInner {
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  border: 3px double var(--accent);
+  animation: pulse 2s ease-in-out infinite alternate;
+  background: radial-gradient(circle, var(--accent-dim) 0%, transparent 70%);
+}
+
+.loadingTitle {
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 0.15rem;
+  margin-bottom: 8px;
+  background: linear-gradient(to bottom, #ffffff, var(--text-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 20px var(--accent-glow);
+}
+
+.levelName {
+  font-size: 1.1rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+  font-weight: 600;
+}
+
+.subtext {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1.1);
+    opacity: 1;
+    box-shadow: 0 0 15px var(--accent);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -1,12 +1,80 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "../../store";
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Web Audio System for One-Shots (Low Latency, Zero Stutter) ────────────────
+
+class WebAudioSystem {
+  private ctx: AudioContext | null = null;
+  private buffers: { [url: string]: AudioBuffer } = {};
+  private loading: { [url: string]: boolean } = {};
+
+  private initContext() {
+    if (!this.ctx) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        this.ctx = new AudioContextClass();
+      }
+    }
+    if (this.ctx && this.ctx.state === "suspended") {
+      this.ctx.resume();
+    }
+  }
+
+  async preload(url: string) {
+    if (this.buffers[url] || this.loading[url]) return;
+    this.loading[url] = true;
+
+    try {
+      this.initContext();
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      
+      if (!this.ctx) {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        this.ctx = new AudioContextClass();
+      }
+
+      const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+      this.buffers[url] = audioBuffer;
+    } catch (e) {
+      console.error("Failed to preload audio:", url, e);
+    } finally {
+      this.loading[url] = false;
+    }
+  }
+
+  play(url: string, volume = 1) {
+    this.initContext();
+    const buffer = this.buffers[url];
+    if (!buffer || !this.ctx) {
+      // Fallback to standard Audio if buffer is not loaded yet
+      const temp = new Audio(url);
+      temp.volume = volume;
+      temp.play().catch(() => {});
+      return;
+    }
+
+    try {
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+
+      const gainNode = this.ctx.createGain();
+      gainNode.gain.setValueAtTime(volume, this.ctx.currentTime);
+
+      source.connect(gainNode);
+      gainNode.connect(this.ctx.destination);
+
+      source.start(0);
+    } catch (e) {
+      console.error("Failed to play Web Audio:", url, e);
+    }
+  }
+}
+
+const webAudioSystem = new WebAudioSystem();
 
 const oneShot = (url: string, vol = 1) => {
-  const a = new Audio(url);
-  a.volume = vol;
-  a.play().catch(() => {});
+  webAudioSystem.play(url, vol);
 };
 
 const createLoop = (url: string, vol = 1): HTMLAudioElement => {
@@ -63,9 +131,13 @@ export const AudioManager = () => {
 
   // ── Create loop tracks once ────────────────────────────────────────────────
   useEffect(() => {
+    webAudioSystem.preload("/audio/spawn.mp3");
+    webAudioSystem.preload("/audio/success.mp3");
+    webAudioSystem.preload("/audio/death.mp3");
+
     ambientRef.current = createLoop("/audio/ambient.mp3", 0.3);
-    // gateRef.current = createLoop("/audio/gate_hum.mp3", 0.45);
-    // altarRef.current = createLoop("/audio/altar_pulse.mp3", 0.4);
+    gateRef.current = createLoop("/audio/gate_hum.mp3", 0.45);
+    altarRef.current = createLoop("/audio/altar_pulse.mp3", 0.4);
     weavingRef.current = createLoop("/audio/weaving.mp3", 0.55);
 
     return () => {

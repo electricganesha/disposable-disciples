@@ -19,13 +19,13 @@ describe('EditorInterface', () => {
 
   it('renders generated ASCII from the store', () => {
     render(<EditorInterface />);
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    const textarea = screen.getByRole('textbox', { name: 'ASCII Layout' }) as HTMLTextAreaElement;
     expect(textarea).toBeInTheDocument();
   });
 
   it('updates the store when typing in the textarea', () => {
     render(<EditorInterface />);
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    const textarea = screen.getByRole('textbox', { name: 'ASCII Layout' }) as HTMLTextAreaElement;
     
     fireEvent.change(textarea, { target: { value: '#' } });
     
@@ -38,7 +38,7 @@ describe('EditorInterface', () => {
 
   it('updates the textarea when the store changes externally', () => {
     render(<EditorInterface />);
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    const textarea = screen.getByRole('textbox', { name: 'ASCII Layout' }) as HTMLTextAreaElement;
     
     act(() => {
       // Manually add a stone at 0,0
@@ -51,7 +51,7 @@ describe('EditorInterface', () => {
 
   it('preserves user input during typing (isInternalChange flag)', () => {
      render(<EditorInterface />);
-     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+     const textarea = screen.getByRole('textbox', { name: 'ASCII Layout' }) as HTMLTextAreaElement;
 
      // User types something with extra space (the generator would trim it)
      const userInput = '# ';
@@ -64,7 +64,7 @@ describe('EditorInterface', () => {
 
   it('resets localASCII to match store if change is external', () => {
     render(<EditorInterface />);
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    const textarea = screen.getByRole('textbox', { name: 'ASCII Layout' }) as HTMLTextAreaElement;
     
     // 1. Initial state: empty
     expect(textarea.value).not.toContain('#');
@@ -75,5 +75,25 @@ describe('EditorInterface', () => {
     });
 
     expect(textarea.value).toContain('#');
+  });
+
+  it('loads template metadata from store on render', () => {
+    act(() => {
+      useStore.setState({
+        currentLevelName: 'My Special Ritual',
+        currentLevelDescription: 'Spooky descriptions here.',
+        environmentType: 'LAVA',
+        totalSpawningLimit: 42,
+        requiredSavedCount: 11,
+      });
+    });
+
+    render(<EditorInterface />);
+    
+    const nameInput = screen.getByLabelText('Ritual Name') as HTMLInputElement;
+    expect(nameInput.value).toBe('My Special Ritual');
+
+    const descInput = screen.getByLabelText('Flavour Description') as HTMLInputElement;
+    expect(descInput.value).toBe('Spooky descriptions here.');
   });
 });

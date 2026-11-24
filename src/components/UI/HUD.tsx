@@ -2,6 +2,8 @@ import { useStore } from "../../store";
 import { GlassPanel, StatDisplay, RitualistButton } from "./UIComponents";
 import styles from "./HUD.module.css";
 
+import { getRegisteredJobs } from "../../jobs";
+
 export const HUD = () => {
   const {
     savedCount,
@@ -14,6 +16,7 @@ export const HUD = () => {
   } = useStore();
 
   const pct = Math.min(1, savedCount / requiredSavedCount) * 100;
+  const jobs = getRegisteredJobs();
 
   return (
     <div className={styles.floatingHud}>
@@ -55,34 +58,16 @@ export const HUD = () => {
         style={{ animationDelay: "0.4s" }}
       >
         <GlassPanel style={{ display: "flex", gap: "8px", padding: "10px" }}>
-          <RitualistButton
-            job="NONE"
-            active={activeJob === "NONE"}
-            label="Wander"
-            icon="/images/wanderer_icon.png"
-            onClick={() => setJob("NONE")}
-          />
-          <RitualistButton
-            job="BONE_WEAVER"
-            active={activeJob === "BONE_WEAVER"}
-            label="Weave"
-            icon="/images/weaver_icon.png"
-            onClick={() => setJob("BONE_WEAVER")}
-          />
-          <RitualistButton
-            job="BLOCKER"
-            active={activeJob === "BLOCKER"}
-            label="Halt"
-            icon="/images/blocker_icon.png"
-            onClick={() => setJob("BLOCKER")}
-          />
-          <RitualistButton
-            job="DIGGER"
-            active={activeJob === "DIGGER"}
-            label="Dig"
-            icon="/images/dig_down.png"
-            onClick={() => setJob("DIGGER")}
-          />
+          {jobs.map((j) => (
+            <RitualistButton
+              key={j.id}
+              job={j.id}
+              active={activeJob === j.id}
+              label={j.label}
+              icon={j.icon}
+              onClick={() => setJob(j.id)}
+            />
+          ))}
         </GlassPanel>
       </div>
     </div>

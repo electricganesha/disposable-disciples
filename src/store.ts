@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { Vector3 } from 'three';
+import type { FloorType, Level } from './levels/types';
 
-export type Job = 'NONE' | 'BLOCKER' | 'BONE_WEAVER' | 'DIGGER';
-export type FloorType = 'STONE' | 'BONE' | 'SUPPORT';
+export type Job = string;
 
 export interface CultistData {
   id: string;
@@ -13,6 +13,7 @@ export interface CultistData {
   scale: [number, number, number]; // [x, y, z] body scale for visual variety
   speedMultiplier: number;
   colorHueShift: number;
+  active: boolean;
 }
 
 export interface ExplosionData {
@@ -32,9 +33,12 @@ interface GameState {
 
   // Level Management
   currentLevelIndex: number;
+  currentLevelName: string;
+  currentLevelDescription: string;
   gameStarted: boolean;
   gameWon: boolean;
   gameLost: boolean;
+  levelLoading: boolean;
 
   // World
   grid: Map<string, FloorType>;
@@ -45,7 +49,7 @@ interface GameState {
   jobQuotas: { [key: string]: number };
 
   // Atmosphere (Parameterised)
-  environmentType: 'ELDRITCH' | 'VOID' | 'BONE';
+  environmentType: string;
   backgroundColor: string;
   ambientColor: string;
   lightIntensity: number;
@@ -55,13 +59,16 @@ interface GameState {
   cultists: CultistData[];
   weavingCount: number;
 
-  // Particle FX
+  // Particle FX + Shakes
   explosions: ExplosionData[];
   successes: ExplosionData[];
+  debris: ExplosionData[];
+  shakeIntensity: number;
 
   // Actions
   startGame: () => void;
   loadLevel: (index: number) => void;
+  loadLevelObject: (level: Level) => void;
   loadNextLevel: () => void;
   setJob: (job: Job) => void;
   addCultist: () => void;
@@ -79,6 +86,10 @@ interface GameState {
   addExplosion: (position: Vector3) => void;
   addSuccess: (position: Vector3) => void;
   setWeavingCount: (count: number) => void;
+  addDebris: (position: Vector3) => void;
+  removeDebris: (id: string) => void;
+  triggerShake: (intensity: number) => void;
+  decayShake: () => void;
 
   // Editor
   view: 'GAME' | 'EDITOR';
@@ -95,7 +106,26 @@ interface GameState {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-import { RITUAL_LEVELS, parseLayout } from './data/levels';
+const createInitialCultists = (spawnLimit: number): CultistData[] => {
+  const randRange = (min: number, max: number) => min + Math.random() * (max - min);
+  return Array.from({ length: spawnLimit }).map((_, idx) => {
+    const scaleX = randRange(0.8, 1.25);
+    const scaleY = randRange(0.85, 1.2);
+    return {
+      id: `cultist_${idx}_${uid()}`,
+      position: [0, -100 - idx, 0] as [number, number, number],
+      direction: 1,
+      job: 'NONE',
+      selected: false,
+      scale: [scaleX, scaleY, scaleX] as [number, number, number],
+      speedMultiplier: randRange(0.85, 1.3),
+      colorHueShift: randRange(-0.05, 0.05),
+      active: false,
+    };
+  });
+};
+
+import { LEVEL_REGISTRY, parseLayout } from './levels/registry';
 
 // ... (existing types)
 
@@ -108,9 +138,12 @@ export const useStore = create<GameState>((set, get) => ({
   requiredSavedCount: 15,
 
   currentLevelIndex: 0,
+  currentLevelName: '',
+  currentLevelDescription: '',
   gameStarted: false,
   gameWon: false,
   gameLost: false,
+  levelLoading: false,
 
   grid: new Map(),
   gatePosition: [-7, 0.6, 0],
@@ -129,19 +162,23 @@ export const useStore = create<GameState>((set, get) => ({
   weavingCount: 0,
   explosions: [],
   successes: [],
+  debris: [],
+  shakeIntensity: 0,
 
   startGame: () => {
-    const params = new URLSearchParams(window.location.search);
-    const levelValue = params.get("level");
-    const startIndex = levelValue ? parseInt(levelValue, 10) : 0;
-    const finalIndex = isNaN(startIndex) ? 0 : startIndex;
-    
-    get().loadLevel(finalIndex);
+    if (!get().currentLevelName) {
+      const params = new URLSearchParams(window.location.search);
+      const levelValue = params.get("level");
+      const startIndex = levelValue ? parseInt(levelValue, 10) : 0;
+      const finalIndex = isNaN(startIndex) ? 0 : startIndex;
+      
+      get().loadLevel(finalIndex);
+    }
     set({ gameStarted: true });
   },
 
   loadLevel: (index) => {
-    const level = RITUAL_LEVELS[index];
+    const level = LEVEL_REGISTRY[index];
     if (!level) return;
 
     const gridMap = new Map<string, FloorType>();
@@ -153,6 +190,8 @@ export const useStore = create<GameState>((set, get) => ({
 
     set({
       currentLevelIndex: index,
+      currentLevelName: level.name,
+      currentLevelDescription: level.description,
       savedCount: 0,
       lostCount: 0,
       totalSpawned: 0,
@@ -168,15 +207,62 @@ export const useStore = create<GameState>((set, get) => ({
       backgroundColor: level.backgroundColor || '#050208',
       ambientColor: level.ambientColor || '#c4b5fd',
       lightIntensity: level.lightIntensity ?? 1.2,
-      cultists: [],
+      cultists: createInitialCultists(level.spawnLimit),
       gameWon: false,
       gameLost: false,
+      debris: [],
+      shakeIntensity: 0,
+      levelLoading: true,
     });
+
+    setTimeout(() => {
+      set({ levelLoading: false });
+    }, 1500);
+  },
+
+  loadLevelObject: (level) => {
+    const gridMap = new Map<string, FloorType>();
+    if (level.gridData) {
+      Object.entries(level.gridData).forEach(([key, val]) => {
+        gridMap.set(key, val);
+      });
+    }
+
+    set({
+      currentLevelIndex: -1,
+      currentLevelName: level.name,
+      currentLevelDescription: level.description,
+      savedCount: 0,
+      lostCount: 0,
+      totalSpawned: 0,
+      totalSpawningLimit: level.spawnLimit,
+      requiredSavedCount: level.requiredSaved,
+      grid: gridMap,
+      gatePosition: level.gatePosition,
+      altarPosition: level.altarPosition,
+      staircasePositions: level.staircasePositions || [],
+      pillarPositions: level.pillarPositions || [],
+      jobQuotas: level.jobQuotas,
+      environmentType: level.environmentType || 'ELDRITCH',
+      backgroundColor: level.backgroundColor || '#050208',
+      ambientColor: level.ambientColor || '#c4b5fd',
+      lightIntensity: level.lightIntensity ?? 1.2,
+      cultists: createInitialCultists(level.spawnLimit),
+      gameWon: false,
+      gameLost: false,
+      debris: [],
+      shakeIntensity: 0,
+      levelLoading: true,
+    });
+
+    setTimeout(() => {
+      set({ levelLoading: false });
+    }, 1500);
   },
 
   loadNextLevel: () => {
     const nextIndex = get().currentLevelIndex + 1;
-    if (nextIndex < RITUAL_LEVELS.length) {
+    if (nextIndex < LEVEL_REGISTRY.length) {
       get().loadLevel(nextIndex);
     }
   },
@@ -186,25 +272,16 @@ export const useStore = create<GameState>((set, get) => ({
   addCultist: () =>
     set((state) => {
       if (state.totalSpawned >= state.totalSpawningLimit) return state;
+      const nextInactive = state.cultists.find((c) => !c.active);
+      if (!nextInactive) return state;
       const [gx, gy, gz] = state.gatePosition;
-      const randRange = (min: number, max: number) => min + Math.random() * (max - min);
-      const scaleX = randRange(0.8, 1.25);
-      const scaleY = randRange(0.85, 1.2);
       return {
         totalSpawned: state.totalSpawned + 1,
-        cultists: [
-          ...state.cultists,
-          {
-            id: uid(),
-            position: [gx, gy, gz],
-            direction: 1,
-            job: 'NONE',
-            selected: false,
-            scale: [scaleX, scaleY, scaleX] as [number, number, number],
-            speedMultiplier: randRange(0.85, 1.3),
-            colorHueShift: randRange(-0.05, 0.05),
-          },
-        ],
+        cultists: state.cultists.map((c) =>
+          c.id === nextInactive.id
+            ? { ...c, active: true, position: [gx, gy, gz] }
+            : c
+        ),
       };
     }),
 
@@ -238,11 +315,39 @@ export const useStore = create<GameState>((set, get) => ({
     set((state) => {
       const newSavedCount = success ? state.savedCount + 1 : state.savedCount;
       const newLostCount = !success ? state.lostCount + 1 : state.lostCount;
-      const newCultists = state.cultists.filter((c) => c.id !== id);
       
-      const victory = newSavedCount >= state.requiredSavedCount;
+      const newCultists = state.cultists.map((c) =>
+        c.id === id ? { ...c, active: false, position: [0, -100, 0] as [number, number, number] } : c
+      );
+      
+      const levelDef = LEVEL_REGISTRY[state.currentLevelIndex];
+      
+      let victory = newSavedCount >= state.requiredSavedCount;
       const allSpawned = state.totalSpawned >= state.totalSpawningLimit;
-      const defeat = allSpawned && newCultists.length === 0 && newSavedCount < state.requiredSavedCount;
+      const activeCount = newCultists.filter((c) => c.active).length;
+      let defeat = allSpawned && activeCount === 0 && newSavedCount < state.requiredSavedCount;
+
+      // Handle custom win condition hook
+      if (levelDef?.winCondition) {
+        const status = levelDef.winCondition({
+          savedCount: newSavedCount,
+          lostCount: newLostCount,
+          totalSpawned: state.totalSpawned,
+          totalSpawningLimit: state.totalSpawningLimit,
+          activeCultistCount: activeCount,
+          requiredSavedCount: state.requiredSavedCount,
+        });
+
+        if (status === "WIN") victory = true;
+        if (status === "LOSE") {
+          victory = false;
+          defeat = true;
+        }
+        if (status === "PLAYING") {
+          victory = false;
+          defeat = false;
+        }
+      }
 
       return {
         savedCount: newSavedCount,
@@ -261,9 +366,9 @@ export const useStore = create<GameState>((set, get) => ({
       return { grid: newGrid };
     }),
 
-  getFloorAt: (x, targetY) => {
+  getFloorAt: (x, z, targetY) => {
     const xRound = Math.round(x);
-    const yVal = targetY !== undefined ? targetY : 0;
+    const yVal = targetY !== undefined ? targetY : (z !== undefined ? z : 0);
     
     // Check main grid
     const inGrid = get().grid.get(`${xRound},${yVal}`);
@@ -273,11 +378,11 @@ export const useStore = create<GameState>((set, get) => ({
     const onStair = get().staircasePositions.some(
       (p) => Math.round(p[0]) === xRound && Math.round(p[1]) === yVal
     );
-    if (onStair) return "STONE";
+    if (onStair) return "STAIR";
 
-    // Check altar
+    // Check altar (altar is 2 units wide, covering columns [altar[0]-1, altar[0]+1] and Y surface at Math.floor(altar[1] + 1.2))
     const altar = get().altarPosition;
-    if (Math.round(altar[0]) === xRound && Math.round(altar[1]) === yVal) {
+    if (Math.abs(xRound - altar[0]) < 1.0 && Math.floor(altar[1] + 1.2) === yVal) {
       return "STONE";
     }
 
@@ -313,6 +418,23 @@ export const useStore = create<GameState>((set, get) => ({
       ],
     })),
   setWeavingCount: (count) => set({ weavingCount: count }),
+  addDebris: (position) =>
+    set((state) => ({
+      debris: [
+        ...state.debris,
+        { id: uid(), position: position.clone(), time: Date.now() },
+      ],
+    })),
+  removeDebris: (id) =>
+    set((state) => ({ debris: state.debris.filter((d) => d.id !== id) })),
+  triggerShake: (intensity) =>
+    set((state) => ({
+      shakeIntensity: Math.max(state.shakeIntensity, intensity),
+    })),
+  decayShake: () =>
+    set((state) => ({
+      shakeIntensity: state.shakeIntensity * 0.88,
+    })),
 
   // Editor
   view: 'GAME',
@@ -324,7 +446,7 @@ export const useStore = create<GameState>((set, get) => ({
     const gridMap = new Map<string, FloorType>();
     if (levelData.gridData) {
       Object.entries(levelData.gridData).forEach(([key, val]) => {
-        gridMap.set(key, val);
+        gridMap.set(key, val as FloorType);
       });
     }
 

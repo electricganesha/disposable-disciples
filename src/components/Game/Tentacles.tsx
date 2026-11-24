@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, memo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -35,7 +35,7 @@ const TentacleSegment = ({ index, total }: { index: number; total: number }) => 
   );
 };
 
-export const Tentacles = () => {
+export const Tentacles = memo(() => {
   const count = 45;
   
   const [positions] = useState(() =>
@@ -67,4 +67,6 @@ export const Tentacles = () => {
       ))}
     </group>
   );
-};
+});
+
+Tentacles.displayName = "Tentacles";

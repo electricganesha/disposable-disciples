@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, memo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useStore, type ExplosionData } from "../../store";
@@ -125,9 +125,66 @@ const SuccessBurst = ({ data }: { data: ExplosionData }) => {
   );
 };
 
-export const ParticleSystem = () => {
+const DebrisBurst = ({ data }: { data: ExplosionData }) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const [tempObject] = useState(() => new THREE.Object3D());
+  const COUNT = 16;
+  const DEBRIS_DURATION = 1000; // 1s
+
+  const [particles] = useState(() =>
+    Array.from({ length: COUNT }, () => ({
+      velocity: new THREE.Vector3(
+        (Math.random() - 0.5) * 3.5,
+        Math.random() * 4.5 + 2.0, // upward burst
+        (Math.random() - 0.5) * 2.0,
+      ),
+      position: new THREE.Vector3(0, 0, 0),
+      scale: Math.random() * 0.08 + 0.04,
+    })),
+  );
+
+  useFrame((_state, delta) => {
+    if (!meshRef.current) return;
+    const elapsed = Date.now() - data.time;
+    const progress = elapsed / DEBRIS_DURATION;
+
+    if (progress >= 1) {
+      useStore.getState().removeDebris(data.id);
+      return;
+    }
+
+    particles.forEach((p, i) => {
+      p.position.add(p.velocity.clone().multiplyScalar(delta));
+      p.velocity.y -= 14 * delta; // Gravity on debris
+
+      const s = p.scale * (1.0 - progress);
+      tempObject.position.copy(p.position);
+      tempObject.scale.setScalar(Math.max(0, s));
+      tempObject.updateMatrix();
+      meshRef.current.setMatrixAt(i, tempObject.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, COUNT]}
+      position={data.position}
+    >
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial
+        color="#7c2d12" // Stone brown / reddish void stone
+        roughness={0.9}
+      />
+    </instancedMesh>
+  );
+};
+
+export const ParticleSystem = memo(() => {
   const explosions = useStore((state) => state.explosions);
   const successes = useStore((state) => state.successes);
+  const debris = useStore((state) => state.debris);
 
   return (
     <group>
@@ -137,6 +194,11 @@ export const ParticleSystem = () => {
       {successes.map((suc) => (
         <SuccessBurst key={suc.id} data={suc} />
       ))}
+      {debris.map((deb) => (
+        <DebrisBurst key={deb.id} data={deb} />
+      ))}
     </group>
   );
-};
+});
+
+ParticleSystem.displayName = "ParticleSystem";

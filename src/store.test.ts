@@ -27,13 +27,46 @@ describe('GameState Store', () => {
     expect(state.totalSpawningLimit).toBeGreaterThan(0);
   });
 
+  it('startGame loads level 0 by default if no level is loaded', () => {
+    act(() => {
+      useStore.setState({ currentLevelName: '' });
+      useStore.getState().startGame();
+    });
+    const state = useStore.getState();
+    expect(state.gameStarted).toBe(true);
+    expect(state.currentLevelIndex).toBe(0);
+    expect(state.currentLevelName).toBe('Ritual I: The Awakening');
+  });
+
+  it('startGame does not overwrite a pre-loaded level', () => {
+    act(() => {
+      useStore.getState().loadLevel(1);
+    });
+    expect(useStore.getState().currentLevelName).toBe('Ritual II: The Divided Path');
+
+    act(() => {
+      useStore.getState().startGame();
+    });
+
+    const state = useStore.getState();
+    expect(state.gameStarted).toBe(true);
+    expect(state.currentLevelIndex).toBe(1);
+    expect(state.currentLevelName).toBe('Ritual II: The Divided Path');
+  });
+
   it('adds cultists up to the spawn limit', () => {
     act(() => {
       // Use a custom state for test stability
       useStore.setState({
         totalSpawningLimit: 5,
         totalSpawned: 0,
-        cultists: [],
+        cultists: [
+          { id: '1', position: [0,0,0], direction: 1, job: 'NONE', selected: false, scale: [1,1,1], speedMultiplier: 1, colorHueShift: 0, active: false },
+          { id: '2', position: [0,0,0], direction: 1, job: 'NONE', selected: false, scale: [1,1,1], speedMultiplier: 1, colorHueShift: 0, active: false },
+          { id: '3', position: [0,0,0], direction: 1, job: 'NONE', selected: false, scale: [1,1,1], speedMultiplier: 1, colorHueShift: 0, active: false },
+          { id: '4', position: [0,0,0], direction: 1, job: 'NONE', selected: false, scale: [1,1,1], speedMultiplier: 1, colorHueShift: 0, active: false },
+          { id: '5', position: [0,0,0], direction: 1, job: 'NONE', selected: false, scale: [1,1,1], speedMultiplier: 1, colorHueShift: 0, active: false },
+        ],
         gatePosition: [0, 0, 0]
       });
     });
@@ -44,7 +77,7 @@ describe('GameState Store', () => {
       }
     });
 
-    expect(useStore.getState().cultists.length).toBe(5);
+    expect(useStore.getState().cultists.filter(c => c.active).length).toBe(5);
     expect(useStore.getState().totalSpawned).toBe(5);
   });
 
